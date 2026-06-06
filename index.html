@@ -10,18 +10,20 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
+            justify-content: flex-start;
+            min-height: 100vh;
             margin: 0;
             background-color: #f4f4f9;
+            padding-top: 50px;
+            box-sizing: border-box;
         }
         h1 { color: #333; }
         
         /* 頁面切換 */
-        .page { display: none; text-align: center; }
+        .page { display: none; text-align: center; width: 100%; max-width: 400px; }
         .page.active { display: block; }
 
-        /* 按鈕樣式 */
+        /* 一般按鈕樣式 */
         button {
             padding: 10px 20px;
             margin: 10px;
@@ -29,15 +31,29 @@
             cursor: pointer;
             border: none;
             border-radius: 5px;
-            background-color: #007bff;
             color: white;
-            transition: background-color 0.3s;
+            transition: opacity 0.3s;
         }
-        button:hover { background-color: #0056b3; }
+        button:hover { opacity: 0.8; }
+        
+        /* 首頁按鈕 */
+        .btn-normal { background-color: #007bff; }
         .btn-special { background-color: #ff4757; }
-        .btn-special:hover { background-color: #ff253a; }
-        .btn-back { background-color: #6c757d; }
-        .btn-back:hover { background-color: #5a6268; }
+
+        /* 轉盤頁輸入區按鈕 (仿截圖顏色) */
+        .btn-start { background-color: #007bff; font-size: 20px; padding: 12px 24px; border-radius: 8px;}
+        .btn-reset { background-color: #e57373; font-size: 16px; padding: 10px 16px; border-radius: 6px;}
+        .btn-done { background-color: #f8f9fa; color: #333; border: 1px solid #ced4da; font-size: 16px; padding: 8px 16px; }
+        .btn-done:hover { background-color: #e2e6ea; }
+
+        /* 返回首頁 (縮小且遠離轉盤) */
+        .btn-back { 
+            background-color: #6c757d; 
+            font-size: 12px; 
+            padding: 6px 12px; 
+            margin-top: 80px; /* 距離上方元素遠一點 */
+            margin-bottom: 30px;
+        }
 
         /* 轉盤容器與指標 */
         .wheel-container {
@@ -63,14 +79,47 @@
             height: 100%;
             border-radius: 50%;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            transition: transform 4s cubic-bezier(0.25, 0.1, 0.25, 1); /* 平滑減速動畫 */
+            transition: transform 4s cubic-bezier(0.25, 0.1, 0.25, 1);
         }
         #result-text {
             font-size: 24px;
             font-weight: bold;
             color: #d35400;
+            margin-top: 15px;
+            height: 35px;
+        }
+
+        /* 輸入區域 */
+        .input-section {
             margin-top: 20px;
-            height: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .input-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 90%;
+            max-width: 300px;
+            height: 180px;
+            font-size: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+        .input-footer {
+            width: 90%;
+            max-width: 300px;
+            display: flex;
+            justify-content: flex-start;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -78,31 +127,87 @@
 
     <div id="home-page" class="page active">
         <h1>請選擇轉盤模式</h1>
-        <button onclick="goToWheel('normal')">轉盤</button>
+        <button class="btn-normal" onclick="goToWheel('normal')">轉盤</button>
         <button class="btn-special" onclick="goToWheel('special')">轉盤.</button>
     </div>
 
     <div id="wheel-page" class="page">
         <h2 id="mode-title">轉盤</h2>
+        
         <div class="wheel-container">
             <div class="pointer"></div>
             <canvas id="wheelCanvas" width="300" height="300"></canvas>
         </div>
-        <button id="spin-btn" onclick="spin()">開始旋轉！</button>
-        <br>
-        <button class="btn-back" onclick="goHome()">返回首頁</button>
+        
         <div id="result-text"></div>
+
+        <div class="input-section">
+            <div class="input-header">
+                <button class="btn-start" onclick="spin()">開始</button>
+                <button class="btn-reset" onclick="resetItems()">重設</button>
+            </div>
+            
+            <textarea id="item-input"></textarea>
+            
+            <div class="input-footer">
+                <button class="btn-done" onclick="updateWheel()">完成</button>
+            </div>
+        </div>
+
+        <button class="btn-back" onclick="goHome()">返回首頁</button>
     </div>
 
     <script>
         const canvas = document.getElementById('wheelCanvas');
         const ctx = canvas.getContext('2d');
-        const segments = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-        const colors = ['#f1c40f', '#e67e22', '#e74c3c', '#9b59b6', '#3498db', '#1abc9c', '#f1c40f', '#e67e22', '#e74c3c', '#9b59b6', '#3498db', '#1abc9c'];
         
-        let currentMode = 'normal'; // 'normal' 或 'special'
+        let segments = [];
+        const baseColors = ['#f1c40f', '#e67e22', '#e74c3c', '#9b59b6', '#3498db', '#1abc9c'];
+        let colors = [];
+        
+        let currentMode = 'normal';
         let currentRotation = 0;
         let isSpinning = false;
+
+        // 初始化載入
+        window.onload = () => {
+            resetItems();
+        };
+
+        // 重新產生顏色陣列
+        function generateColors() {
+            colors = [];
+            for(let i = 0; i < segments.length; i++) {
+                colors.push(baseColors[i % baseColors.length]);
+            }
+        }
+
+        // 讀取 Textarea 並更新轉盤
+        function updateWheel() {
+            if (isSpinning) return;
+            const text = document.getElementById('item-input').value;
+            // 依換行符號切割，並過濾掉空白行
+            const newSegments = text.split('\n').map(item => item.trim()).filter(item => item !== '');
+            
+            if (newSegments.length === 0) {
+                alert('請至少輸入一個選項！');
+                return;
+            }
+            
+            segments = newSegments;
+            generateColors();
+            currentRotation = 0;
+            canvas.style.transition = 'none';
+            canvas.style.transform = `rotate(0deg)`;
+            drawWheel();
+        }
+
+        // 重設為 1~12
+        function resetItems() {
+            if (isSpinning) return;
+            document.getElementById('item-input').value = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12";
+            updateWheel();
+        }
 
         // 繪製轉盤
         function drawWheel() {
@@ -114,7 +219,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             for (let i = 0; i < segments.length; i++) {
-                const angle = i * arc - Math.PI / 2; // 從正上方開始畫 (-90度)
+                const angle = i * arc - Math.PI / 2;
                 
                 ctx.beginPath();
                 ctx.fillStyle = colors[i];
@@ -124,15 +229,17 @@
                 ctx.fill();
                 ctx.save();
 
-                // 繪製文字
                 ctx.fillStyle = 'white';
-                ctx.font = 'bold 20px Arial';
+                // 根據文字長度調整字體大小避免超出扇形
+                let fontSize = segments.length > 20 ? 14 : 20;
+                ctx.font = `bold ${fontSize}px Arial`;
+                
                 ctx.translate(
                     centerX + Math.cos(angle + arc / 2) * (radius * 0.75),
                     centerY + Math.sin(angle + arc / 2) * (radius * 0.75)
                 );
                 ctx.rotate(angle + arc / 2 + Math.PI / 2);
-                ctx.fillText(segments[i], -ctx.measureText(segments[i]).width / 2, 10);
+                ctx.fillText(segments[i], -ctx.measureText(segments[i]).width / 2, 8);
                 ctx.restore();
             }
         }
@@ -141,22 +248,17 @@
         function goToWheel(mode) {
             currentMode = mode;
             document.getElementById('home-page').classList.remove('active');
-            document.getElementById('wheel-page').classList.active = true;
             document.getElementById('wheel-page').classList.add('active');
             
-            document.getElementById('mode-title').innerText = mode === 'normal' ? '正常轉盤' : '特殊轉盤';
+            document.getElementById('mode-title').innerText = mode === 'normal' ? '{轉盤}' : '{轉盤.}';
             document.getElementById('result-text').innerText = '';
             
-            // 重置轉盤角度
-            currentRotation = 0;
-            canvas.style.transition = 'none';
-            canvas.style.transform = `rotate(0deg)`;
-            
-            drawWheel();
+            // 進入時確保轉盤對齊輸入框的內容
+            updateWheel(); 
         }
 
         function goHome() {
-            if (isSpinning) return; // 轉動時禁止返回
+            if (isSpinning) return;
             document.getElementById('wheel-page').classList.remove('active');
             document.getElementById('home-page').classList.add('active');
         }
@@ -164,14 +266,35 @@
         // 旋轉邏輯
         function spin() {
             if (isSpinning) return;
+            if (segments.length === 0) {
+                alert("請先輸入選項並點擊完成！");
+                return;
+            }
+
+            // 確保畫面上顯示的是最新的輸入名單
+            updateWheel();
+
             isSpinning = true;
             document.getElementById('result-text').innerText = '旋轉中...';
 
             let winningIndex;
 
             if (currentMode === 'special') {
-                // 特殊模式：過濾掉數字 1 和 4 (對應的 index 是 0 和 3)
-                const allowedIndices = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11]; // 對應數字 2,3,5,6,7,8,9,10,11,12
+                // 特殊模式：過濾掉文字內容剛好是 "1" 或 "4" 的選項
+                let allowedIndices = [];
+                for (let i = 0; i < segments.length; i++) {
+                    if (segments[i] !== '1' && segments[i] !== '4') {
+                        allowedIndices.push(i);
+                    }
+                }
+
+                if (allowedIndices.length === 0) {
+                    alert("特殊轉盤模式下不能只輸入 1 和 4！");
+                    isSpinning = false;
+                    document.getElementById('result-text').innerText = '';
+                    return;
+                }
+
                 const randomIndex = Math.floor(Math.random() * allowedIndices.length);
                 winningIndex = allowedIndices[randomIndex];
             } else {
@@ -179,30 +302,20 @@
                 winningIndex = Math.floor(Math.random() * segments.length);
             }
 
-            // 計算旋轉角度
             const arcDegrees = 360 / segments.length;
-            // 目標扇形的中心角度 (為了讓指針指在扇形正中間)
             const targetAngle = winningIndex * arcDegrees + (arcDegrees / 2);
-            
-            // 為了讓目標對準正上方的指針，轉盤需要旋轉 360 - targetAngle
-            // 加上多轉幾圈的基數 (例如轉 5 圈 = 1800 度) 增加視覺效果
             const extraSpins = 5 * 360; 
-            
-            // 計算最終需要 CSS rotate 的度數
-            // 這裡必須加上 currentRotation 避免下次轉動時回朔
             const finalRotation = currentRotation + extraSpins + (360 - targetAngle) - (currentRotation % 360);
 
-            // 啟動動畫
             canvas.style.transition = 'transform 4s cubic-bezier(0.25, 0.1, 0.25, 1)';
             canvas.style.transform = `rotate(${finalRotation}deg)`;
             
             currentRotation = finalRotation;
 
-            // 監聽動畫結束
             setTimeout(() => {
                 isSpinning = false;
                 document.getElementById('result-text').innerText = `結果是：${segments[winningIndex]}！`;
-            }, 4000); // 4秒與 CSS transition 時間一致
+            }, 4000);
         }
     </script>
 </body>
